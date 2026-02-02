@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  proxy:
+    build: .
+    container_name: proxy-harold
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - proxy_data:/app/cache_data
+    environment:
+      - PORT=8080
+      - CACHE_TTL=1h
+      - RATE_LIMIT=100
+      - RATE_BURST=200
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  proxy_data:

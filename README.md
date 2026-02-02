@@ -54,6 +54,30 @@ Set via environment variables:
 | `FETCH_TIMEOUT` | `30s` | Upstream fetch timeout |
 | `MAX_RESPONSE_SIZE` | `10485760` | Max response size (10MB) |
 
+## Docker
+
+You can run the proxy using Docker for easy persistence and auto-restarts.
+
+### Using Docker Compose (Recommended)
+
+```bash
+# Start the container in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+### Using Dockerfile
+
+```bash
+# Build
+docker build -t proxy-harold .
+
+# Run
+docker run -p 8080:8080 -v $(pwd)/cache_data:/app/cache_data proxy-harold
+```
+
 ## Cloudflare Tunnel
 
 No TLS needed! Cloudflare handles HTTPS termination.
