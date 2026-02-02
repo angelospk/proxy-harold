@@ -22,7 +22,7 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	// Configuration from environment
-	port := getEnv("PORT", "8080")
+	port := getEnv("PORT", "8888")
 	cacheTTL := getEnvDuration("CACHE_TTL", 1*time.Hour)
 	cacheDir := getEnv("CACHE_DIR", "./cache_data")
 	rateLimit := getEnvFloat("RATE_LIMIT", 100) // requests per second

@@ -20,23 +20,23 @@ go build -o proxy-harold ./cmd/server
 ./proxy-harold
 ```
 
-Server starts on `http://localhost:8080`
+Server starts on `http://localhost:8888`
 
 ## Usage
 
 ```bash
 # Fetch a URL
-curl "http://localhost:8080/?url=https://api.example.com/data"
+curl "http://localhost:8888/?url=https://api.example.com/data"
 
 # Check if cached (look for X-Cache header)
-curl -I "http://localhost:8080/?url=https://api.example.com/data"
+curl -I "http://localhost:8888/?url=https://api.example.com/data"
 ```
 
 ### From JavaScript
 
 ```javascript
 // No CORS issues!
-const response = await fetch('http://localhost:8080/?url=https://api.example.com/data');
+const response = await fetch('http://localhost:8888/?url=https://api.example.com/data');
 const data = await response.json();
 ```
 
@@ -46,7 +46,7 @@ Set via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8080` | Server port |
+| `PORT` | `8888` | Server port |
 | `CACHE_TTL` | `1h` | Cache time-to-live |
 | `CACHE_DIR` | `./cache_data` | BadgerDB storage path |
 | `RATE_LIMIT` | `100` | Requests per second per IP |
@@ -75,7 +75,7 @@ docker-compose logs -f
 docker build -t proxy-harold .
 
 # Run
-docker run -p 8080:8080 -v $(pwd)/cache_data:/app/cache_data proxy-harold
+docker run -p 8888:8888 -v $(pwd)/cache_data:/app/cache_data proxy-harold
 ```
 
 ## Cloudflare Tunnel
@@ -84,7 +84,7 @@ No TLS needed! Cloudflare handles HTTPS termination.
 
 ```bash
 # Install cloudflared, then:
-cloudflared tunnel --url http://localhost:8080
+cloudflared tunnel --url http://localhost:8888
 ```
 
 ## API

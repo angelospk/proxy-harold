@@ -6,11 +6,11 @@ services:
     container_name: proxy-harold
     restart: always
     ports:
-      - "8080:8080"
+      - "8888:8888"
     volumes:
       - proxy_data:/app/cache_data
     environment:
-      - PORT=8080
+      - PORT=8888
       - CACHE_TTL=1h
       - RATE_LIMIT=100
       - RATE_BURST=200
