@@ -79,10 +79,16 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body, enforcing the max size on the actual bytes read
+	// (Content-Length alone can be absent or lie)
+	maxSize := h.fetcher.MaxSize()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSize+1))
 	if err != nil {
 		h.sendError(w, "failed to read response: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	if int64(len(body)) > maxSize {
+		h.sendError(w, proxy.ErrResponseTooBig.Error(), http.StatusBadGateway)
 		return
 	}
 

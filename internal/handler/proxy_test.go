@@ -11,6 +11,14 @@ import (
 	"github.com/harold/proxy-harold/internal/proxy"
 )
 
+// newTestFetcher returns a fetcher that permits private addresses so tests
+// can use httptest servers on 127.0.0.1
+func newTestFetcher(timeout time.Duration, maxSize int64) *proxy.Fetcher {
+	f := proxy.NewFetcher(timeout, maxSize)
+	f.AllowPrivate = true
+	return f
+}
+
 // mockCache implements cache.Cache for testing
 type mockCache struct {
 	data map[string][]byte
@@ -49,7 +57,7 @@ func (m *mockCache) Close() error {
 }
 
 func TestHandler_RequiresURLParameter(t *testing.T) {
-	h := NewProxyHandler(newMockCache(), proxy.NewFetcher(10*time.Second, 10*1024*1024))
+	h := NewProxyHandler(newMockCache(), newTestFetcher(10*time.Second, 10*1024*1024))
 
 	req := httptest.NewRequest("GET", "/", nil)
 	rec := httptest.NewRecorder()
@@ -62,7 +70,7 @@ func TestHandler_RequiresURLParameter(t *testing.T) {
 }
 
 func TestHandler_RejectsInvalidURL(t *testing.T) {
-	h := NewProxyHandler(newMockCache(), proxy.NewFetcher(10*time.Second, 10*1024*1024))
+	h := NewProxyHandler(newMockCache(), newTestFetcher(10*time.Second, 10*1024*1024))
 
 	req := httptest.NewRequest("GET", "/?url=javascript:alert(1)", nil)
 	rec := httptest.NewRecorder()
@@ -83,7 +91,7 @@ func TestHandler_FetchesAndCaches(t *testing.T) {
 	defer server.Close()
 
 	mockC := newMockCache()
-	h := NewProxyHandler(mockC, proxy.NewFetcher(10*time.Second, 10*1024*1024))
+	h := NewProxyHandler(mockC, newTestFetcher(10*time.Second, 10*1024*1024))
 
 	// First request - cache miss
 	req := httptest.NewRequest("GET", "/?url="+server.URL, nil)
@@ -113,7 +121,7 @@ func TestHandler_FetchesAndCaches(t *testing.T) {
 
 func TestHandler_ReturnsCachedData(t *testing.T) {
 	mockC := newMockCache()
-	fetcher := proxy.NewFetcher(10*time.Second, 10*1024*1024)
+	fetcher := newTestFetcher(10*time.Second, 10*1024*1024)
 	h := NewProxyHandler(mockC, fetcher)
 
 	// Pre-populate cache
@@ -142,7 +150,7 @@ func TestHandler_SetsCORSHeaders(t *testing.T) {
 	mockC := newMockCache()
 	mockC.Set("https://example.com", []byte("data"), "text/plain")
 
-	h := NewProxyHandler(mockC, proxy.NewFetcher(10*time.Second, 10*1024*1024))
+	h := NewProxyHandler(mockC, newTestFetcher(10*time.Second, 10*1024*1024))
 
 	req := httptest.NewRequest("GET", "/?url=https://example.com", nil)
 	rec := httptest.NewRecorder()
@@ -160,7 +168,7 @@ func TestHandler_SetsCORSHeaders(t *testing.T) {
 }
 
 func TestHandler_HandlesPreflight(t *testing.T) {
-	h := NewProxyHandler(newMockCache(), proxy.NewFetcher(10*time.Second, 10*1024*1024))
+	h := NewProxyHandler(newMockCache(), newTestFetcher(10*time.Second, 10*1024*1024))
 
 	req := httptest.NewRequest("OPTIONS", "/?url=https://example.com", nil)
 	req.Header.Set("Origin", "https://somesite.com")
@@ -185,7 +193,7 @@ func TestHandler_ProxiesContentType(t *testing.T) {
 	}))
 	defer server.Close()
 
-	h := NewProxyHandler(newMockCache(), proxy.NewFetcher(10*time.Second, 10*1024*1024))
+	h := NewProxyHandler(newMockCache(), newTestFetcher(10*time.Second, 10*1024*1024))
 
 	req := httptest.NewRequest("GET", "/?url="+server.URL, nil)
 	rec := httptest.NewRecorder()
@@ -199,7 +207,7 @@ func TestHandler_ProxiesContentType(t *testing.T) {
 
 func TestHandler_HandlesUpstreamErrors(t *testing.T) {
 	// Use an invalid server that will refuse connections
-	h := NewProxyHandler(newMockCache(), proxy.NewFetcher(1*time.Second, 10*1024*1024))
+	h := NewProxyHandler(newMockCache(), newTestFetcher(1*time.Second, 10*1024*1024))
 
 	req := httptest.NewRequest("GET", "/?url=http://localhost:59999/noexist", nil)
 	rec := httptest.NewRecorder()
@@ -207,6 +215,65 @@ func TestHandler_HandlesUpstreamErrors(t *testing.T) {
 
 	if rec.Code != http.StatusBadGateway {
 		t.Errorf("expected 502, got %d", rec.Code)
+	}
+}
+
+func TestHandler_RejectsPrivateTargets(t *testing.T) {
+	// Strict fetcher (no AllowPrivate) must block internal targets
+	h := NewProxyHandler(newMockCache(), proxy.NewFetcher(10*time.Second, 10*1024*1024))
+
+	req := httptest.NewRequest("GET", "/?url=http://169.254.169.254/latest/meta-data/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for private target, got %d", rec.Code)
+	}
+}
+
+func TestHandler_RejectsBodyExceedingMaxSize(t *testing.T) {
+	// Server streams more than maxSize without a Content-Length header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(make([]byte, 4096))
+	}))
+	defer server.Close()
+
+	mockC := newMockCache()
+	h := NewProxyHandler(mockC, newTestFetcher(10*time.Second, 1024)) // 1KB max
+
+	req := httptest.NewRequest("GET", "/?url="+server.URL, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("expected 502 for oversized body, got %d", rec.Code)
+	}
+
+	// Oversized response must not be cached
+	key := cache.GenerateCacheKey(server.URL)
+	if _, exists := mockC.data[key]; exists {
+		t.Error("oversized response should not be cached")
+	}
+}
+
+func TestHandler_AcceptsBodyAtExactMaxSize(t *testing.T) {
+	const maxSize = 1024
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(make([]byte, maxSize))
+	}))
+	defer server.Close()
+
+	h := NewProxyHandler(newMockCache(), newTestFetcher(10*time.Second, maxSize))
+
+	req := httptest.NewRequest("GET", "/?url="+server.URL, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 for body at exact max size, got %d", rec.Code)
+	}
+	if rec.Body.Len() != maxSize {
+		t.Errorf("expected %d bytes, got %d", maxSize, rec.Body.Len())
 	}
 }
 

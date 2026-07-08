@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -155,8 +156,7 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 
 func getEnvFloat(key string, defaultValue float64) float64 {
 	if value := os.Getenv(key); value != "" {
-		var f float64
-		if _, err := os.Stdin.Read(nil); err == nil {
+		if f, err := strconv.ParseFloat(value, 64); err == nil {
 			return f
 		}
 	}
@@ -165,13 +165,7 @@ func getEnvFloat(key string, defaultValue float64) float64 {
 
 func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
-		var i int
-		for _, c := range value {
-			if c >= '0' && c <= '9' {
-				i = i*10 + int(c-'0')
-			}
-		}
-		if i > 0 {
+		if i, err := strconv.Atoi(value); err == nil {
 			return i
 		}
 	}
@@ -180,13 +174,7 @@ func getEnvInt(key string, defaultValue int) int {
 
 func getEnvInt64(key string, defaultValue int64) int64 {
 	if value := os.Getenv(key); value != "" {
-		var i int64
-		for _, c := range value {
-			if c >= '0' && c <= '9' {
-				i = i*10 + int64(c-'0')
-			}
-		}
-		if i > 0 {
+		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
 			return i
 		}
 	}
